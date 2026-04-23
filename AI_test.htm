@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 期中考互動模擬題庫</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { background-color: #fff; max-width: 800px; width: 100%; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); padding: 30px; box-sizing: border-box; }
+        h1 { text-align: center; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background-color: #ecf0f1; padding: 15px; border-radius: 8px; }
+        .stats { font-size: 16px; font-weight: bold; color: #e74c3c; }
+        .question-box { font-size: 18px; line-height: 1.6; margin-bottom: 20px; font-weight: bold; color: #2c3e50; }
+        .options { display: flex; flex-direction: column; gap: 10px; }
+        .option-btn { background-color: #fdfdfd; border: 2px solid #bdc3c7; padding: 15px; font-size: 16px; text-align: left; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+        .option-btn:hover:not(:disabled) { background-color: #e8f4fd; border-color: #3498db; }
+        .option-btn.correct { background-color: #d4edda; border-color: #28a745; color: #155724; }
+        .option-btn.wrong { background-color: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .btn-action { display: block; width: 100%; background-color: #3498db; color: #fff; border: none; padding: 15px; font-size: 18px; border-radius: 8px; margin-top: 25px; cursor: pointer; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>AI 期中考互動模擬測驗</h1>
+    
+    <div id="setup-screen">
+        <div class="controls">
+            <div>
+                <label><input type="radio" name="mode" value="sequential" checked> 循序出題</label>
+                <label><input type="radio" name="mode" value="random"> 隨機出題</label>
+            </div>
+            <div>
+                <label>題數: 
+                    <select id="q-count">
+                        <option value="10">10題</option>
+                        <option value="25">25題</option>
+                        <option value="50" selected>全部 (50題)</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+        <button class="btn-action" onclick="startQuiz()">開始測驗</button>
+    </div>
+
+    <div id="quiz-screen" class="hidden">
+        <div class="controls">
+            <span class="stats" id="progressText">第 1 題</span>
+            <span class="stats" id="scoreText">得分: 0</span>
+        </div>
+        <div class="question-box" id="questionBox">載入中...</div>
+        <div id="optionsBox" class="options"></div>
+        <button class="btn-action hidden" id="nextBtn" onclick="nextQuestion()">下一題</button>
+    </div>
+
+    <div id="result-screen" class="hidden" style="text-align:center;">
+        <h2>測驗結束！</h2>
+        <p id="final-score" style="font-size:24px; font-weight:bold;"></p>
+        <button class="btn-action" onclick="location.reload()">重新測驗</button>
+    </div>
+</div>
+
+<script>
+    // 嚴格對照您的原始 Excel/CSV 資料內容
+    const allQuestions = [
+        {"q":"下列何者不屬於資料整合（Data Integration）的主要目的？","options":["統一不同來源資料的格式與欄位定義，以確保分析一致性","識別並處理重複資料，避免影響模型訓練結果","整併多來源資料，以提升資料完整性與應用價值","依資料保存政策延長原始資料留存期限，以利未來可能的分析需求"],"ans":3},
+        {"q":"某智慧城市專案導入 AI 技術，以優化垃圾收集路線調度並即時監測空氣品質變化。系統需持續蒐集環境數據（如 PM2.5、氣體濃度）與設備狀態（如垃圾桶滿溢度）。下列何種技術最直接支援上述需求？","options":["專家系統（Expert System）","決策支援系統（Decision Support System）","啟發式決策引擎（Heuristic Decision Engine）","感知器網路（Sensor Network）"],"ans":3},
+        {"q":"下列何者不符合非監督式學習（Unsupervised Learning）的典型特徵？","options":["模型可依據資料中的特徵相似性進行自動分群","訓練過程中不需仰賴事先定義的標籤資料","常用於探索資料的潛在結構或隱含模式","模型主要學習輸入特徵與既定目標標記之間的對應關係"],"ans":3},
+        {"q":"某保險公司建立 AI 理賠金額預測模型。歷史理賠資料經檢定後呈近似常態分佈，但仍存在少數極端高額案件。資料科學團隊在不破壞整體分佈特性的前提下，規劃進行離群值處理。下列何者最不適當？","options":["依統計準則（如 Z-score 或 IQR）評估後，再決定是否調整或處理極端值","採用截尾（Trimming）處理極端值，以提升模型穩定性","使用 One-hot 編碼（One-hot Encoding）將離群值轉換為類別特徵以改善數值穩定性","結合領域知識評估其合理性，再決定保留或修正"],"ans":2},
+        {"q":"某銀行建立 AI 詐欺交易偵測模型。歷史交易資料中，詐欺樣本比例極低，導致模型訓練時偏向預測為「正常交易」。資料科學團隊評估採用 SMOTE（Synthetic Minority Over-sampling Technique）改善訓練資料分佈。下列何者最符合 SMOTE 技術的主要功能？","options":["透過隨機刪除部分正常交易資料，以降低類別失衡程度","依據少數類別樣本的特徵空間，合成產生新的少數類別樣本","調整模型的損失函數（Loss Function）權重，使誤判少數類別時的罰提高","交叉驗證（Cross-validation）方式重新分割資料集，使各個資料類別比例一致"],"ans":1},
+        {"q":"下列何者不屬於資料標記（Data Labeling）過程中常見的品質確保手段？","options":["導入專家複核機制（Expert Review）以修正標記錯誤","建立標記準則說明書，減少不同標記者之間的主觀認知差異","使用自動化模型進行預標記（Pre-labeling），再由人工進行細微調整","將所有資料全數進行亂數洗牌（Shuffling），以提升標記效率"],"ans":3},
+        {"q":"關於資料清理（Data Cleaning）中的缺失值處理，下列敘述何者最正確？","options":["只要資料中存在缺失值，就應全數刪除該筆樣本，以確保資料純淨度","使用中位數填補（Median Imputation）適用於受離群值影響較大的數值型特徵","所有的缺失值處理皆能顯著提升機器學習模型的泛化能力（Generalization）","缺失值處理後不需再進行模型評估，因為資料品質已獲得改善"],"ans":1},
+        {"q":"在機器學習專案中，若模型在訓練資料上的表現優異，但在測試資料上的誤差顯著較高。下列哪一項改善策略最不適當？","options":["引入正規化（Regularization）技術，如 L1 或 L2 正規化","增加模型的模型參數量或提升結構複雜度","透過資料增廣（Data Augmentation）技術增加訓練樣本多樣性","使用 Dropout 技術隨機忽略部分神經元連接"],"ans":1},
+        {"q":"在評估二元分類模型效能時，若「將實際上為詐欺的交易判定為正常交易」的成本遠高於「將正常交易判定為詐欺」，下列哪一項指標最能反映模型對詐欺樣本的捕捉能力？","options":["準確率（Accuracy）","精確率（Precision）","召回率（Recall）","F1 分數（F1-score）"],"ans":2},
+        {"q":"下列關於啟動函數（Activation Function）在神經網路中作用之敘述，何者正確？","options":["啟動函數能幫助神經網路學習非線性特徵關係","所有的啟動函數輸出範圍皆介於 0 與 1 之間","ReLU 函數在輸入值小於 0 時，梯度依然為常數，可避免梯度消失問題","只有在輸出層才需要設置啟動函數"],"ans":0},
+        {"q":"某電信業者欲預測客戶流失率。若資料集中客戶流失與未流失的比例極端不均（如 1:99），在評估模型好壞時，最不建議單獨使用下列哪一項指標？","options":["準確率（Accuracy）","召回率（Recall）","混淆矩陣（Confusion Matrix）","ROC 曲線下的面積（AUC）"],"ans":0},
+        {"q":"在深層神經網路訓練過程中，若模型參數更新過於緩慢或甚至停止更新，可能發生了梯度消失（Vanishing Gradient）問題。下列何者不是改善該問題的常見方法？","options":["使用 ReLU 取代 Sigmoid 作為隱藏層的啟動函數","導入批次正規化（Batch Normalization）技術","增加更多隱藏層數以提升模型的學習潛力","使用殘差連接（Residual Connections）結構"],"ans":2},
+        {"q":"在進行特徵選取（Feature Selection）時，下列哪一種方法屬於「嵌入式方法」（Embedded Methods）？","options":["遞歸特徵消除法（RFE）","相關係數分析法（Correlation Analysis）","決策樹演算法中的特徵重要性評估","向前選取法（Forward Selection）"],"ans":2},
+        {"q":"關於機器學習中「超參數」（Hyperparameters）與「參數」（Parameters）的區別，下列敘述何者正確？","options":["超參數是在訓練過程中由演算法自行學習得到的","參數是在訓練開始前，由資料科學家手動設定的","神經網路中的權重（Weights）屬於超參數的一種","學習率（Learning Rate）與迭代次數（Epochs）屬於超參數"],"ans":3},
+        {"q":"某購物網站利用關聯規則（Association Rules）分析消費行為，發現「買咖啡的人有 70% 也會買鮮奶」。下列何項指標最能說明此規則的強度與可信度？","options":["支持度（Support）","置信度（Confidence）","提升度（Lift）","覆蓋度（Coverage）"],"ans":1},
+        {"q":"在自然語言處理（NLP）中，Word Embedding 技術的主要目的是什麼？","options":["將文字資料轉換為機器可理解的數值向量空間","計算文本中單字出現的頻率以進行關鍵字擷取","透過語法分析將句子拆解為動詞、名詞等詞性標記","將所有字詞轉化為對應的圖像特徵"],"ans":0},
+        {"q":"某 AI 醫療專案開發 X 光影像輔助診斷系統。若標記資料（具有確診標籤的影像）獲取極其困難且成本高昂，下列哪一種學習策略最適合？","options":["強化學習（Reinforcement Learning）","遷移學習（Transfer Learning）","隨機森林（Random Forest）","線性回歸（Linear Regression）"],"ans":1},
+        {"q":"下列關於卷積神經網路（CNN）中池化層（Pooling Layer）之作用，何者錯誤？","options":["降低特徵維度以減少運算負擔","增加模型的旋轉或平移不變性（Invariance）","有效避免梯度消失問題並取代啟動函數","降低模型對細節特徵的敏感度，減少過度擬合風險"],"ans":2},
+        {"q":"在機器學習專案中，交叉驗證（Cross-validation）最主要的目的為何？","options":["縮短模型訓練所需的時間","確保訓練資料中不包含離群值","穩定評估模型的性能並降低因資料劃分產生的偏差","自動進行超參數優化以取代人工調整"],"ans":2},
+        {"q":"在處理類別型特徵（Categorical Features）時，若該特徵不具備大小或順序關係（如顏色：紅、黃、藍），下列哪種編碼方式最為合適？","options":["標籤編碼（Label Encoding）","均值編碼（Mean Encoding）","獨熱編碼（One-hot Encoding）","對數轉換（Log Transformation）"],"ans":2},
+        {"q":"下列何種演算法最常被用於解決資料分群（Clustering）問題？","options":["支持向量機（SVM）","K-平均演算法（K-means）","邏輯回歸（Logistic Regression）","梯度提升樹（XGBoost）"],"ans":1},
+        {"q":"某工廠欲建立預測性維護 AI 模型。若歷史資料庫包含大量的正常運作數據，但缺乏設備損壞的樣本，下列何種技術最適合應用？","options":["分類預測模型","關聯規則挖掘","異常偵測（Anomaly Detection）","線性規劃模型"],"ans":2},
+        {"q":"關於大語言模型（LLM）中「幻覺」（Hallucination）現象的定義，下列敘述何者正確？","options":["模型輸出與輸入語法不一致的現象","模型生成內容流暢但事實錯誤或無根據的情形","模型在多輪對話後遺忘先前對話內容的情形","模型生成的文字具有高度重複性的情形"],"ans":1},
+        {"q":"在機器學習中，模型複雜度與誤差之間的關係，通常符合偏誤與變異權衡（Bias-Variance Tradeoff）。下列何者敘述正確？","options":["高偏誤通常發生在模型過於複雜、過度擬合時","高變異通常發生在模型過於簡單、欠擬合時","理想的模型應該在低偏誤與低變異之間取得平衡","只要增加訓練樣本數量，就一定能同時消除偏誤與變異"],"ans":2},
+        {"q":"在 AI 實務開發中，特徵縮放（Feature Scaling）的主要目的是什麼？","options":["將所有特徵的數值範圍標準化，避免特定大數值主導模型學習過程","刪除相關性過高的特徵以減少計算量","將連續數值特徵轉換為離散類別特徵","透過特徵映射技術增加模型維度"],"ans":0},
+        {"q":"關於強化學習（Reinforcement Learning）核心要素之敘述，下列何者正確？","options":["模型透過觀察標籤資料直接進行預測學習","代理人（Agent）透過與環境（Environment）互動，並根據獎勵（Reward）優化策略","僅適用於解決靜態分類問題，無法處理連續決策問題","不需要定義狀態（State）與動作（Action）"],"ans":1},
+        {"q":"下列何者屬於生成式 AI（Generative AI）最常見的應用案例？","options":["根據過往股價趨勢預測明日股價","辨識圖片中是否存在特定行人","依據使用者提示詞生成一段全新的廣告腳本","判斷一封郵件是否為垃圾信件"],"ans":2},
+        {"q":"某零售商欲透過 AI 模型優化庫存管理。下列何種演算法最適合處理具有時間序列（Time Series）特性的歷史銷售數據？","options":["K-平均分群（K-means）","長短期記憶網路（LSTM）","主成分分析（PCA）","邏輯回歸（Logistic Regression）"],"ans":1},
+        {"q":"關於 AI 倫理（AI Ethics）中「公平性」的考量，下列敘述何者正確？","options":["只要模型訓練資料量足夠大，就一定能實現公平性","模型可能會學習到訓練資料中的歷史偏見，導致對特定族群產生歧視","所有的 AI 模型皆能自動修正人類的社會偏見","只要不將性別或種族特徵放入模型訓練，模型就一定不會產生偏見"],"ans":1},
+        {"q":"下列哪一項技術主要用於解決深度學習模型部屬至邊緣裝置（如手機）時的運算資源限制？","options":["遷移學習（Transfer Learning）","模型量化（Model Quantization）","資料擴增（Data Augmentation）","超參數調優（Hyperparameter Tuning）"],"ans":1},
+        {"q":"關於生成式 AI 模型中的「提示工程」（Prompt Engineering），下列何者敘述正確？","options":["它是指透過編寫高品質的提示詞，引導模型產出更精確或符合需求的結果","它是一種修改模型底層神經網路架構的技術","只有程式開發者才能進行提示工程的操作","提示工程僅能應用於翻譯任務"],"ans":0},
+        {"q":"在進行特徵工程時，某團隊發現「通話時間」與「數據使用量」兩個特徵高度線性相關。為了降低模型冗餘特徵，最適合採用下列哪種技術進行降維？","options":["K-means","主成分分析（PCA）","SMOTE","One-hot 編碼"],"ans":1},
+        {"q":"在訓練神經網路時，若損失函數（Loss Function）陷入局部最小值（Local Minima），下列哪一項超參數最直接影響模型跳脫該狀態的能力？","options":["批次大小（Batch Size）","學習率（Learning Rate）與優化器設定","隱藏層層數","啟動函數種類"],"ans":1},
+        {"q":"某金融機構欲建立個人信貸審核 AI 模型，法律要求模型必須具備可解釋性（Explainability）。下列哪種模型最適合作為基底模型？","options":["深度卷積神經網路（CNN）","多層感知器（MLP）","決策樹（Decision Tree）","生成對抗網路（GAN）"],"ans":2},
+        {"q":"下列關於 GPU 在 AI 模型訓練中扮演之角色之敘述，何者正確？","options":["GPU 具有大量平行處理單元，適合加速矩陣運算","GPU 主要是用來儲存巨量原始資料","GPU 在訓練序列化邏輯處理上比 CPU 更有效率","使用 GPU 訓練模型能自動修正資料缺失值"],"ans":0},
+        {"q":"在進行影像辨識任務時，資料擴增（Data Augmentation）技術常用的操作不包括下列何者？","options":["隨機旋轉與翻轉圖片","隨機縮放或裁剪圖片區域","隨機更改圖片中物件的標籤（Labels）","調整圖片的亮度或對比度"],"ans":2},
+        {"q":"在 NLP 領域中，Transformer 架構中的「注意力機制」（Attention Mechanism）主要解決了什麼問題？","options":["增加模型對輸入文字長度的限制","使模型能夠有效捕捉文本中長距離的單字依賴關係","自動將所有文字標記為對應的圖像特徵","取代所有的隱藏層權重運算"],"ans":1},
+        {"q":"關於強化學習中的探索與利用（Exploration vs. Exploitation）之敘述，何者正確？","options":["利用是指嘗試新的動作以發現潛在更好的回報","探索是指持續執行目前已知回報最高的動作","在學習過程中，過度側重利用可能導致代理人陷入局部最佳解","代理人應在訓練全程完全放棄探索，以提升學習效率"],"ans":2},
+        {"q":"下列關於遷移學習（Transfer Learning）之敘述，何者錯誤？","options":["它可以將大型模型預訓練好的特徵提取能力，遷移至資料量較少的任務中","它能顯著縮短針對特定小型任務訓練模型所需的時間","它要求來源任務與目標任務的資料分布必須完全相同","通常會凍結部分預訓練層，僅對輸出層附近的神經元進行微調"],"ans":2},
+        {"q":"某電商平台利用 AI 分析顧客評價內容，並標註為「正面」、「負面」或「中立」。此任務屬於下列哪一種 AI 應用類別？","options":["影像分割","情感分析（Sentiment Analysis）","異常偵測","物件追蹤"],"ans":1},
+        {"q":"下列何種技術主要用於評估生成式 AI 模型產出的文本與參考答案之間的相似度指標？","options":["MSE（均方誤差）","ROUGE 或 BLEU 分數","Z-score","混淆矩陣"],"ans":1},
+        {"q":"某企業規劃導入 RAG（Retrieval-Augmented Generation）架構以優化內部的法規問答系統。相較於單純對大語言模型進行微調（Fine-tuning），下列何者為 RAG 的主要優勢？","options":["顯著降低推理時的運算延遲，提升回應效能","調整語言模型的輸出限制機制，以降低生成內容與法規不一致的風險","建立固定法規問答對照表，以規則化方式優先回應常見問題","導入可支援增量更新的索引管理方式，使異動文件可即時反映於檢索結果"],"ans":3},
+        {"q":"關於機器學習不同的學習模式，下列敘述何者錯誤？","options":["2、3、6","2、4、5","1、3、6","3、5"],"ans":3},
+        {"q":"某零售業者建立顧客行為預測模型，資料集中包含「年消費金額」、「平均單筆交易金額」及「會員年資」等數值型特徵。資料分析顯示，部分金額特徵呈現高度偏態分布，少數樣本的數值顯著高於多數觀測值。為降低極端值對模型學習穩定性的影響，下列哪一種特徵工程方法最適合？","options":["對數轉換（Log Transformation）","區間化（Binning）","One-hot 編碼（One-hot Encoding）","隨機重抽樣（Random Resampling）"],"ans":0},
+        {"q":"某團隊訓練深層神經網路模型時，發現訓練誤差長時間幾乎未下降，模型參數更新幅度極小，呈現學習停滯現象。若研判問題與梯度傳遞效率有關，下列何者最適合的改善策略？","options":["延長模型訓練時間，使模型有更多機會調整參數","增加訓練樣本數量，以提升模型學習能力","調整模型中的啟動函數設定，以改善訓練過程的穩定性","簡化模型結構，以降低模型過度擬合的可能性"],"ans":2},
+        {"q":"某市政府建置城市治理資料平台，需整合交通車流偵測資料、路口監視器影像，以及民眾透過陳情系統提交的文字通報。由於各類資料格式、儲存方式與資料型態差異甚大，導致資料清理與整合成本顯著增加。就大數據特性而言，此專案最主要面臨下列哪一項挑戰？","options":["資料量（Volume）","資料傳輸速度（Velocity）","資料多樣性（Variety）","資料準確性（Veracity）"],"ans":2},
+        {"q":"某 AI 研發團隊在開發圖像生成的生成對抗網路（GANs）時，發現判別器（Discriminator）在訓練初期能輕易區分真假影像，導致生成器（Generator）收到的梯度訊號趨近於零，進而無法學習產生逼真影像。下列何種方法最能直接改善上述問題？","options":["增加判別器的網路深度，以提高辨識準確度","導入批次正規化（Batch Normalization）以穩定特徵分布","調整判別器的啟動函數為 Tanh，以限制輸出範圍","採用 Wasserstein GAN（WGAN）等新型損失函數結構，改善梯度傳遞穩定度"],"ans":3},
+        {"q":"下列關於過度擬合（Overfitting）與欠擬合（Underfitting）之敘述，何者正確？","options":["欠擬合代表模型捕捉到了資料中不具代表性的雜訊","增加訓練數據通常能有效改善欠擬合現象","過度擬合通常伴隨著訓練誤差低、但測試誤差高","正規化技術（Regularization）的主要目的是解決欠擬合問題"],"ans":2},
+        {"q":"在特徵工程中，若某特徵欄位含有高比例（超過 80%）的缺失值，且該特徵並非業務關鍵特徵，下列處理方式何者最優先考慮？","options":["使用該特徵的平均值進行填補","暫時剔除該特徵，以降低模型維度及可能的雜訊影響","透過回歸模型預測並填補所有的缺失值","手動填入常數"],"ans":1},
+        {"q":"關於 RAG（檢索增強生成）架構的敘述，下列何者正確？","options":["僅依賴預訓練參數進行回答","先檢索外部相關文件，再結合生成模型產生答案","不需要任何外部資料來源","主要用於圖像生成而非文本生成"],"ans":1}
+    ];
+
+    let quizData = [];
+    let curIdx = 0;
+    let score = 0;
+    let answered = false;
+
+    function startQuiz() {
+        const mode = document.querySelector('input[name="mode"]:checked').value;
+        const count = parseInt(document.getElementById('q-count').value);
+        let qs = [...allQuestions];
+        if (mode === 'random') {
+            qs.sort(() => Math.random() - 0.5);
+        }
+        quizData = qs.slice(0, count);
+        curIdx = 0; score = 0;
+        document.getElementById('setup-screen').classList.add('hidden');
+        document.getElementById('quiz-screen').classList.remove('hidden');
+        loadQ();
+    }
+
+    function loadQ() {
+        answered = false;
+        const q = quizData[curIdx];
+        document.getElementById('progressText').innerText = `第 ${curIdx + 1} / ${quizData.length} 題`;
+        document.getElementById('questionBox').innerText = q.q;
+        const box = document.getElementById('optionsBox');
+        box.innerHTML = '';
+        q.options.forEach((opt, i) => {
+            const b = document.createElement('button');
+            b.className = 'option-btn';
+            b.innerText = `(${i+1}) ${opt}`;
+            b.onclick = () => check(i, b);
+            box.appendChild(b);
+        });
+        document.getElementById('nextBtn').classList.add('hidden');
+    }
+
+    function check(i, b) {
+        if (answered) return;
+        answered = true;
+        const q = quizData[curIdx];
+        const btns = document.querySelectorAll('.option-btn');
+        btns.forEach(x => x.disabled = true);
+        if (i === q.ans) {
+            b.classList.add('correct');
+            score += (100 / quizData.length);
+        } else {
+            b.classList.add('wrong');
+            btns[q.ans].classList.add('correct');
+        }
+        document.getElementById('scoreText').innerText = `得分: ${Math.round(score)}`;
+        document.getElementById('nextBtn').classList.remove('hidden');
+    }
+
+    function nextQuestion() {
+        curIdx++;
+        if (curIdx < quizData.length) loadQ();
+        else {
+            document.getElementById('quiz-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+            document.getElementById('final-score').innerText = `最終成績: ${Math.round(score)} 分`;
+        }
+    }
+</script>
+</body>
+</html>
